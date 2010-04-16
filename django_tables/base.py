@@ -16,6 +16,7 @@ class TableOptions(object):
         super(TableOptions, self).__init__()
         self.sortable = getattr(options, 'sortable', None)
         self.order_by = getattr(options, 'order_by', None)
+        self.sort_param = getattr(options, 'sort_param', "sort")
 
 
 class DeclarativeColumnsMetaclass(type):
@@ -420,16 +421,22 @@ class BaseTable(object):
 
     rows_class = Rows
 
-    # this value is not the same as None. it means 'use the default sort
-    # order', which may (or may not) be inherited from the table options.
-    # None means 'do not sort the data', ignoring the default.
-    DefaultOrder = type('DefaultSortType', (), {})()
+    # these values are not the same as None. it means 'use the default',
+    # which may (or may not) be inherited from the table options. None
+    # resets the value(s), ignoring the table defaults.
+    DefaultOrder     = type('DefaultOrderType',     (), {})()
+    DefaultSortParam = type('DefaultSortParamType', (), {})()
 
-    def __init__(self, data, order_by=DefaultOrder):
+    def __init__(self, data, order_by=DefaultOrder, sort_param=DefaultSortParam, request=None):
         """Create a new table instance with the iterable ``data``.
 
         If ``order_by`` is specified, the data will be sorted accordingly.
-        Otherwise, the sort order can be specified in the table options.
+
+        If ``request`` is specified, the sort order can be overridden by
+        a GET parameter named ``sort_param`` (which defaults to "sort").
+
+        (Default values to both  ``order_by`` and ``sort_param`` can be
+        specified in the table options.)
 
         Note that unlike a ``Form``, tables are always bound to data. Also
         unlike a form, the ``columns`` attribute is read-only and returns
@@ -445,11 +452,23 @@ class BaseTable(object):
         self._snapshot = None      # will store output dataset (ordered...)
         self._rows = self.rows_class(self)
         self._columns = Columns(self)
+        # TODO: store 'request' once it becomes useful to do so.
 
-        # None is a valid order, so we must use DefaultOrder as a flag
-        # to fall back to the table sort order. set the attr via the
-        # property, to wrap it in an OrderByTuple before being stored
-        if order_by != BaseTable.DefaultOrder:
+        # None is an acceptable value of sort_param. (meaning, 'this table
+        # cannot be sorted via the query string'.). if the sort_param arg
+        # was given (even None), store it. otherwise, store the default.
+        if sort_param != BaseTable.DefaultSortParam:
+            self._sort_param = sort_param
+
+        else:
+            self._sort_param = self._meta.sort_param
+
+        # if the request included a sort parameter, it takes priority.
+        # otherwise, fall back to the 'order_by' arg, then the default.
+        if (request is not None) and (self._sort_param in request.GET):
+            self.order_by = request.GET.get(self._sort_param)
+
+        elif order_by != BaseTable.DefaultOrder:
             self.order_by = order_by
 
         else:

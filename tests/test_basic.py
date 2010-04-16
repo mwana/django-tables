@@ -3,7 +3,7 @@
 
 
 from nose.tools import assert_raises, assert_equal
-from django.http import Http404
+from django.http import Http404, HttpRequest, QueryDict
 from django.core.paginator import Paginator
 import django_tables as tables
 from django_tables.base import BaseTable
@@ -150,3 +150,47 @@ def test_pagination():
     # exceptions are converted into 404s
     assert_raises(Http404, books.paginate, Paginator, 10, page=9999)
     assert_raises(Http404, books.paginate, Paginator, 10, page="abc")
+
+
+def test_request():
+    class MyTable(TestTable):
+        alpha = tables.Column()
+        beta  = tables.Column()
+        gamma = tables.Column()
+
+        class Meta:
+            order_by = 'gamma'
+
+
+    # the sort parameter present in the query string takes priority over
+    # both the 'order_by' argument, and the table default.
+
+    req = HttpRequest()
+    req.GET = QueryDict("sort=alpha", encoding="utf8")
+
+    assert_equal(('alpha',), MyTable([], request=req).order_by)
+    assert_equal(('alpha',), MyTable([], order_by='beta', request=req).order_by)
+    assert_equal(('alpha',), MyTable([], order_by=None, request=req).order_by)
+
+
+    # mulitple tables can be sorted in a view, with a unique sort_param.
+
+    class MyFirstTable(MyTable):
+        class Meta:
+            sort_param = "sort1"
+
+    class MySecondTable(MyTable):
+        class Meta:
+            sort_param = "sort2"
+
+    req = HttpRequest()
+    req.GET = QueryDict("sort1=beta&sort2=gamma", encoding="utf8")
+
+    assert_equal(('beta',),  MyFirstTable([],  request=req).order_by)
+    assert_equal(('gamma',), MySecondTable([], request=req).order_by)
+
+
+    # the name of the sort parameter can be provided per-instance, too.
+    req = HttpRequest()
+    req.GET = QueryDict("whatever=-beta", encoding="utf8")
+    assert_equal(('-beta',), MyTable([], sort_param='whatever', request=req).order_by)
