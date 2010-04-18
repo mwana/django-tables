@@ -345,7 +345,25 @@ class BoundRow(object):
 
         # We are supposed to return ``name``, but the column might be
         # named differently in the source data.
-        result =  self.data[self.table._cols_to_fields([name])[0]]
+        try:
+            result = self.data[self.table._cols_to_fields([name])[0]]
+
+        # a common error here (at least, for me), is trying to display a
+        # django model using a BoundRow. this won't work, because unlike
+        # a dict (which we were expecting), the values of django fields
+        # can't be accessed via __getitem__. (i have no idea why not.)
+        # wrap this error in something a bit more useful.
+        except TypeError, err:
+            msg = unicode(err)
+            if msg.endswith("unsubscriptable"):
+
+                # check for a built-in django model attr, to avoid
+                # importing django.db.model to check the base class
+                if hasattr(self.data, "DoesNotExist"):
+                    msg += (". If you are trying to render a Django model, "
+                            "consider using BoundModelRow instead.")
+
+            raise(TypeError(msg))
 
         # if the field we are pointing to is a callable, remove it
         if callable(result):
