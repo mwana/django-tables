@@ -396,8 +396,11 @@ class Rows(object):
 
     row_class = BoundRow
 
-    def __init__(self, table):
+    def __init__(self, table, row_class=None):
         self.table = table
+
+        if row_class is not None:
+            self.row_class = row_class
 
     def _reset(self):
         pass   # we currently don't use a cache
@@ -439,13 +442,18 @@ class BaseTable(object):
 
     rows_class = Rows
 
+    # here, None means 'delegate the row_class to the rows_class'. most
+    # of the time, that's a good idea. but sometimes, i just want to
+    # override the row_class, and not touch rows_class.
+    row_class = None
+
     # these values are not the same as None. it means 'use the default',
     # which may (or may not) be inherited from the table options. None
     # resets the value(s), ignoring the table defaults.
     DefaultOrder     = type('DefaultOrderType',     (), {})()
     DefaultSortParam = type('DefaultSortParamType', (), {})()
 
-    def __init__(self, data, order_by=DefaultOrder, sort_param=DefaultSortParam, request=None):
+    def __init__(self, data, order_by=DefaultOrder, sort_param=DefaultSortParam, rows_class=None, row_class=None, request=None):
         """Create a new table instance with the iterable ``data``.
 
         If ``order_by`` is specified, the data will be sorted accordingly.
@@ -466,9 +474,14 @@ class BaseTable(object):
         table instances, so modifying that will not touch the class-wide
         column list.
         """
+
+        # overwrite the default classes for this instance.
+        if row_class is not None:  self.row_class = row_class
+        if rows_class is not None: self.rows_class = rows_class
+
         self._data = data
         self._snapshot = None      # will store output dataset (ordered...)
-        self._rows = self.rows_class(self)
+        self._rows = self.rows_class(self, self.row_class)
         self._columns = Columns(self)
         # TODO: store 'request' once it becomes useful to do so.
 
